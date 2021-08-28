@@ -149,6 +149,8 @@ fn main() {
     let mut rvcpu = cpu::CPU::new(buffer);
     let mut i = 0;
     while rvcpu.is_running() {
+        // Enables stepping and printing of regs if we passed in the -i flag
+        // TODO: Breakpoints and continuous operation.
         if pargs.contains(&Interactive) {
             let input = get_input();
             let cmd = parse_cmd(input);

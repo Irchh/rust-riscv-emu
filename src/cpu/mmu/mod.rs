@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub const DRAM_BASE: usize = 0x8000_0000;
+
 #[derive(Debug)]
 pub struct MMU {
     ram: Vec<u8>, // Box<[u8]> doesn't wanna work
@@ -16,10 +18,11 @@ impl MMU {
 
     pub fn write_8(&mut self, addr: usize, val: u8) -> Result<(), ()> {
         // TODO: Paging
-        if addr >= self.ram.len() {
+        println!("\tWriting \"{:02X}\" to addr 0x{:X}", val, addr);
+        if addr < DRAM_BASE || addr >= self.ram.len()+DRAM_BASE {
             Err(())
         } else {
-            self.ram[addr] = val;
+            self.ram[addr-DRAM_BASE] = val;
             Ok(())
         }
     }
@@ -48,15 +51,16 @@ impl MMU {
         if self.write_32(addr, lower).is_err() {
             return Err(());
         }
-        self.write_32(addr.overflowing_add(2).0, upper)
+        self.write_32(addr.overflowing_add(4).0, upper)
     }
 
     pub fn read_8(&self, addr: usize) -> Result<u8, ()> {
         // TODO: Paging
-        if addr >= self.ram.len() {
+        if addr < DRAM_BASE || addr >= self.ram.len()+DRAM_BASE {
             Err(())
         } else {
-            Ok(self.ram[addr])
+            //println!("\tReading \"{:02X}\" from addr 0x{:X}", self.ram[addr-DRAM_BASE], addr);
+            Ok(self.ram[addr-DRAM_BASE])
         }
     }
 
@@ -96,7 +100,7 @@ impl MMU {
             return Err(());
         }
         let mut retval = _retval.unwrap() as u64;
-        let _add = self.read_32(addr.overflowing_add(2).0);
+        let _add = self.read_32(addr.overflowing_add(4).0);
         if _add.is_err() {
             return Err(());
         }

@@ -59,7 +59,7 @@ enum Cmd {
     Step,
     PrintAll,
     PrintRegs,
-    PrintMemRegion{ addr: u64, len: u64},
+    PrintMemRegion{ addr: usize, len: usize},
     Nothing,
 }
 
@@ -80,21 +80,27 @@ fn parse_cmd(s: String) -> Cmd {
                         if i >= c.len()-1 {
                             return PrintMemRegion { addr: 0, len: 16 };
                         }
-                        let _f = c[i+1].parse::<u64>();
+                        let mut _f = c[i+1].parse::<u64>();
                         if _f.is_err() {
-                            println!("Not valid address: {:?}", c[i+1]);
-                            return Nothing;
+                            _f = u64::from_str_radix(c[i+1].trim_start_matches("0x"), 16);
+                            if _f.is_err() {
+                                println!("Not valid address: {:?}", c[i+1]);
+                                return Nothing;
+                            }
                         }
-                        let f = _f.unwrap();
+                        let f = _f.unwrap() as usize;
                         if i >= c.len()-2 {
                             return PrintMemRegion { addr: f, len: 16 };
                         }
-                        let _l = c[i+2].parse::<u64>();
+                        let mut _l = c[i+2].parse::<u64>();
                         if _l.is_err() {
-                            println!("Not valid address: {:?}", c[i+2]);
-                            return Nothing;
+                            _l = u64::from_str_radix(c[i+2].trim_start_matches("0x"), 16);
+                            if _l.is_err() {
+                                println!("Not valid address: {:?}", c[i+2]);
+                                return Nothing;
+                            }
                         }
-                        let l = _l.unwrap();
+                        let l = _l.unwrap() as usize;
                         return PrintMemRegion { addr: f, len: l };
                     }
                     s => {
@@ -167,7 +173,7 @@ fn main() {
                     rvcpu.print_regs();
                 }
                 Cmd::PrintMemRegion { addr, len } => {
-
+                    rvcpu.print_mem_reg(addr, len);
                 }
                 Nothing => {}
             }
@@ -176,7 +182,7 @@ fn main() {
             i+=1;
             rvcpu.step();
         }
-        if i > 100 {
+        if i > 500 {
             break;
         }
     }

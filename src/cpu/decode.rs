@@ -4,9 +4,9 @@ use crate::cpu::REG_NAMES;
 
 pub enum Instructions {
     Add{rd: usize, rs1: usize, rs2: usize},
-    Addw,
+    Addw{rd: usize, rs1: usize, rs2: usize},
     Addi{rd: usize, rs1: usize, imm: i64},
-    Addiw,
+    Addiw{rd: usize, rs1: usize, imm: i64},
     And{rd: usize, rs1: usize, rs2: usize},
     Andi{rd: usize, rs1: usize, imm: i64},
     Auipc{rd: usize, imm: i64},
@@ -86,11 +86,15 @@ impl Debug for Instructions {
             Instructions::Add { rd, rs1, rs2 } => {
                 f.write_str(format!("Add {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], REG_NAMES[rs2]).as_str())
             }
-            Addw => { f.write_str(format!("Addw").as_str()) }
+            Instructions::Addw { rd, rs1, rs2 } => {
+                f.write_str(format!("Addw {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], REG_NAMES[rs2]).as_str())
+            }
             Instructions::Addi { rd, rs1, imm } => {
                 f.write_str(format!("Addi {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
             }
-            Addiw => { f.write_str(format!("Addiw").as_str()) }
+            Instructions::Addiw { rd, rs1, imm } => {
+                f.write_str(format!("Addiw {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
             Instructions::And { rd, rs1, rs2 } => {
                 f.write_str(format!("And {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], REG_NAMES[rs2]).as_str())
             }
@@ -180,16 +184,16 @@ impl Debug for Instructions {
             RdInstRet => { f.write_str(format!("RdInstRet").as_str()) }
             RdInstRetH => { f.write_str(format!("RdInstRetH").as_str()) }
             Instructions::Sb { rs1, rs2, imm } => {
-                f.write_str(format!("Sb {}, {}, {}", REG_NAMES[rs1], REG_NAMES[rs2], imm).as_str())
+                f.write_str(format!("Sb {}, {}({})", REG_NAMES[rs2], imm, REG_NAMES[rs1]).as_str())
             }
             Instructions::Sh { rs1, rs2, imm } => {
-                f.write_str(format!("Sh {}, {}, {}", REG_NAMES[rs1], REG_NAMES[rs2], imm).as_str())
+                f.write_str(format!("Sh {}, {}({})", REG_NAMES[rs2], imm, REG_NAMES[rs1]).as_str())
             }
             Instructions::Sw { rs1, rs2, imm } => {
-                f.write_str(format!("Sw {}, {}, {}", REG_NAMES[rs1], REG_NAMES[rs2], imm).as_str())
+                f.write_str(format!("Sw {}, {}({})", REG_NAMES[rs2], imm, REG_NAMES[rs1]).as_str())
             }
             Instructions::Sd { rs1, rs2, imm } => {
-                f.write_str(format!("Sd {}, {}, {}", REG_NAMES[rs1], REG_NAMES[rs2], imm).as_str())
+                f.write_str(format!("Sd {}, {}({})", REG_NAMES[rs2], imm, REG_NAMES[rs1]).as_str())
             }
             Sll => { f.write_str(format!("Sll").as_str()) }
             Sllw => { f.write_str(format!("Sllw").as_str()) }
@@ -240,8 +244,42 @@ impl Instructions {
         let jtype_imm = _jtype_imm_1_10 | _jtype_imm_11 | _jtype_imm_12_19 | _jtype_imm_20;
 
         match opcode {
-            0x13 => { Addi { rd, rs1, imm: itype_imm } }
-            0x33 => { Add { rd, rs1, rs2 } }
+            0x13 => /* OP-IMM */ {
+                match funct3 {
+                    0b000 => { Addi { rd, rs1, imm: itype_imm } }
+                    _ => {
+                        println!("Unknown funct3 OP-IMM: 0x{:X}", funct3);
+                        Unknown
+                    }
+                }
+            }
+            0x33 => {
+                match funct3 {
+                    0b000 => { Add { rd, rs1, rs2 } }
+                    _ => {
+                        println!("Unknown funct3 0x33: 0x{:X}", funct3);
+                        Unknown
+                    }
+                }
+            }
+            0x1B => /* OP-IMM-32 */ {
+                match funct3 {
+                    0b000 => { Addiw { rd, rs1, imm: itype_imm } }
+                    _ => {
+                        println!("Unknown funct3 OP-IMM-32: 0x{:X}", funct3);
+                        Unknown
+                    }
+                }
+            }
+            0x3B => {
+                match funct3 {
+                    0b000 => { Addw { rd, rs1, rs2 } }
+                    _ => {
+                        println!("Unknown funct3 0x33: 0x{:X}", funct3);
+                        Unknown
+                    }
+                }
+            }
 
             0x03 => /* Loads */ {
                 match funct3 {
@@ -274,6 +312,8 @@ impl Instructions {
 
             0x17 => { Auipc { rd, imm: utype_imm } }
             0x63 => /* Conditional jumps */ {
+                println!("\n\nfunct3 cond jmp: 0b{:03b}", funct3);
+                println!("inst: 0b{:032b}", inst);
                 match funct3  {
                     0b000 => { Beq { rs1, rs2, imm: btype_imm } }
                     0b001 => { Bne { rs1, rs2, imm: btype_imm } }

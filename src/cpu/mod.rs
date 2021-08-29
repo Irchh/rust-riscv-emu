@@ -3,6 +3,7 @@
 use crate::cpu::decode::Instructions;
 use std::fmt;
 use std::fmt::{Formatter, Error};
+use crate::cpu::mmu::DRAM_BASE;
 
 mod decode;
 mod mmu;
@@ -41,12 +42,14 @@ pub const REG_NAMES: [&str; 32] = [
 
 impl CPU {
     pub fn new(buffer: Vec<u8>) -> CPU {
-        let mem_size = 1024*1024;
-        let mut regs = [0; 32];
-        regs[2] = mem_size as u64;
+        //let mem_size = 1024*1024;
+        let mem_size = 1536;
+        let mut regs = [0 as u64; 32];
+        regs[1] = (1000+DRAM_BASE) as u64;
+        regs[2] = (mem_size+DRAM_BASE) as u64;
         CPU {
             regs,
-            pc: 0,
+            pc: DRAM_BASE as u64,
             running: true,
             mmu: mmu::MMU::new(mem_size, buffer),
         }
@@ -60,7 +63,7 @@ impl CPU {
         println!("{}", self);
     }
 
-    pub fn print_regs(&mut self) {
+    pub fn print_regs(&self) {
         for i in 0..self.regs.len() {
             let mut data = format!("{} = ", REG_NAMES[i]);
             data = format!("{:>7}{}", data, self.regs[i] as i64);
@@ -71,6 +74,13 @@ impl CPU {
         }
     }
 
+    pub fn print_mem_reg(&self, addr: usize, len: usize) {
+        for i in addr..(addr + len) {
+            print!("{:02X} ", self.mmu.read_8(i).unwrap());
+        }
+        println!();
+    }
+
     fn fetch(&self) -> Result<u32, ()> {
         self.mmu.read_32(self.pc as usize)
     }
@@ -79,6 +89,7 @@ impl CPU {
         if reg == 0 || reg > self.regs.len() {
             return;
         }
+        println!("\tWriting \"{}\" to {}", val, REG_NAMES[reg]);
         self.regs[reg] = val;
     }
 
@@ -95,8 +106,16 @@ impl CPU {
                 self.write_reg(rd, self.read_reg(rs1).wrapping_add(self.read_reg(rs2)));
                 Ok(())
             }
+            Instructions::Addw { rd, rs1, rs2 } => {
+                self.write_reg(rd, self.read_reg(rs1).wrapping_add(self.read_reg(rs2)) as u32 as i32 as i64 as u64);
+                Ok(())
+            }
             Instructions::Addi { rd, rs1, imm } => {
                 self.write_reg(rd, self.read_reg(rs1).wrapping_add(imm as u64));
+                Ok(())
+            }
+            Instructions::Addiw { rd, rs1, imm } => {
+                self.write_reg(rd, self.read_reg(rs1).wrapping_add(imm as u64) as u32 as i32 as i64 as u64);
                 Ok(())
             }
             Instructions::Lb { rd, rs1, imm } => {
@@ -194,7 +213,7 @@ impl CPU {
             }
 
             Instructions::Auipc { rd, imm } => {
-                println!("Auipc imm: 0x{:X}", imm);
+                println!("\tAuipc imm: 0x{:X}", imm);
                 self.write_reg(rd, self.pc + (imm as u64));
                 Ok(())
             }
@@ -202,30 +221,38 @@ impl CPU {
             Instructions::Jalr { rd, rs1, imm } => {
                 let rs1_val = self.read_reg(rs1);
                 self.write_reg(rd, self.pc + 4);
-                println!("self.pc: 0x{:02X}", self.pc);
+                println!("\tself.pc: 0x{:02X}", self.pc);
                 self.pc = imm as u64 + rs1_val;
                 self.pc &= !1;
-                println!("self.pc: 0x{:02X}", self.pc);
+                println!("\tself.pc: 0x{:02X}", self.pc);
                 self.pc = self.pc.wrapping_sub(4); // To negate the +4 after
                 Ok(())
             }
 
             Instructions::Jal { rd, imm } => {
                 self.set(rd, self.pc + 4);
-                self.pc += imm.wrapping_sub(4) as u64;
+                self.pc = self.pc.wrapping_add(imm.wrapping_sub(4) as u64);
                 Ok(())
             }
 
             Instructions::Beq { rs1, rs2, imm } => {
                 if self.read_reg(rs1) == self.read_reg(rs2) {
-                    self.pc = imm as u64;
+                    self.pc = self.pc.wrapping_add(imm as u64 - 4);
                 }
                 Ok(())
             }
 
             Instructions::Bne { rs1, rs2, imm } => {
                 if self.read_reg(rs1) != self.read_reg(rs2) {
-                    self.pc = imm as u64;
+                    self.pc = self.pc.wrapping_add(imm as u64 - 4);
+                }
+                Ok(())
+            }
+
+            Instructions::Bltu { rs1, rs2, imm } => {
+                println!("\tBltu {} < {}, {}", self.read_reg(rs1), self.read_reg(rs2), imm);
+                if self.read_reg(rs1) < self.read_reg(rs2) {
+                    self.pc = self.pc.wrapping_add(imm as u64 - 4);
                 }
                 Ok(())
             }
@@ -248,7 +275,7 @@ impl CPU {
             self.running = false; return;
         }
         let inst = decode::Instructions::from(raw_u32.unwrap());
-        println!("{:02X} inst: {:?}", self.pc, inst);
+        println!("\n{:02X} inst: {:?}", self.pc, inst);
         let status = self.execute(inst);
         if status.is_err() {
             self.running = false;

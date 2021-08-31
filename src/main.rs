@@ -1,9 +1,11 @@
-use std::{fs, env};
-use crate::Flags::{Interactive, File};
-use std::io::{Write, Read};
+use std::{env, fs};
+use std::io::{Read, Write};
+
 use crate::Cmd::*;
+use crate::Flags::{File, Interactive};
 
 mod cpu;
+mod bus;
 
 #[derive(Debug)]
 #[derive(PartialOrd, PartialEq)]

@@ -1,22 +1,25 @@
 #![allow(dead_code)]
 
-use crate::cpu::decode::Instructions;
-use std::fmt;
-use std::fmt::{Formatter, Error};
-use crate::cpu::mmu::DRAM_BASE;
+use std::alloc;
+use std::fmt::{Display, Error, Formatter};
+use decode::Instructions;
+
+use crate::bus;
+use crate::bus::DRAM_BASE;
 
 mod decode;
-mod mmu;
+
+const MiB: usize = 1024*1024;
 
 #[derive(Debug)]
 pub struct CPU {
     regs: [u64; 32],
     pc: u64,
     running: bool,
-    mmu: mmu::MMU,
+    bus: bus::BUS,
 }
 
-impl fmt::Display for CPU {
+impl Display for CPU {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         #![allow(unused_must_use)]
         f.write_str("CPU {\n");
@@ -42,16 +45,15 @@ pub const REG_NAMES: [&str; 32] = [
 
 impl CPU {
     pub fn new(buffer: Vec<u8>) -> CPU {
-        //let mem_size = 1024*1024;
-        let mem_size = 1536;
+        let mem_size = 128*MiB;
+        //let mem_size = 1536;
         let mut regs = [0 as u64; 32];
-        regs[1] = (1000+DRAM_BASE) as u64;
         regs[2] = (mem_size+DRAM_BASE) as u64;
         CPU {
             regs,
             pc: DRAM_BASE as u64,
             running: true,
-            mmu: mmu::MMU::new(mem_size, buffer),
+            bus: bus::BUS::new(mem_size, buffer),
         }
     }
 
@@ -76,13 +78,13 @@ impl CPU {
 
     pub fn print_mem_reg(&self, addr: usize, len: usize) {
         for i in addr..(addr + len) {
-            print!("{:02X} ", self.mmu.read_8(i).unwrap());
+            print!("{:02X} ", self.bus.read_8(i).unwrap());
         }
         println!();
     }
 
     fn fetch(&self) -> Result<u32, ()> {
-        self.mmu.read_32(self.pc as usize)
+        self.bus.read_32(self.pc as usize)
     }
 
     fn write_reg(&mut self, reg: usize, val: u64) {
@@ -119,7 +121,7 @@ impl CPU {
                 Ok(())
             }
             Instructions::Lb { rd, rs1, imm } => {
-                let val = self.mmu.read_8(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_8(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -128,7 +130,7 @@ impl CPU {
                 }
             }
             Instructions::Lh { rd, rs1, imm } => {
-                let val = self.mmu.read_16(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_16(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -137,7 +139,7 @@ impl CPU {
                 }
             }
             Instructions::Lw { rd, rs1, imm } => {
-                let val = self.mmu.read_32(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_32(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -146,7 +148,7 @@ impl CPU {
                 }
             }
             Instructions::Ld { rd, rs1, imm } => {
-                let val = self.mmu.read_64(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_64(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -156,7 +158,7 @@ impl CPU {
             }
 
             Instructions::Lbu { rd, rs1, imm } => {
-                let val = self.mmu.read_8(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_8(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -165,7 +167,7 @@ impl CPU {
                 }
             }
             Instructions::Lhu { rd, rs1, imm } => {
-                let val = self.mmu.read_16(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_16(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -174,7 +176,7 @@ impl CPU {
                 }
             }
             Instructions::Lwu { rd, rs1, imm } => {
-                let val = self.mmu.read_32(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
+                let val = self.bus.read_32(self.read_reg(rs1).wrapping_add(imm as u64) as usize);
                 if val.is_err() {
                     Err("Read error!".to_string())
                 } else {
@@ -184,28 +186,28 @@ impl CPU {
             }
 
             Instructions::Sb { rs1, rs2, imm } => {
-                if self.mmu.write_8(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2) as u8).is_err() {
+                if self.bus.write_8(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2) as u8).is_err() {
                     Err("Write error!".to_string())
                 } else {
                     Ok(())
                 }
             }
             Instructions::Sh { rs1, rs2, imm } => {
-                if self.mmu.write_16(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2) as u16).is_err() {
+                if self.bus.write_16(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2) as u16).is_err() {
                     Err("Write error!".to_string())
                 } else {
                     Ok(())
                 }
             }
             Instructions::Sw { rs1, rs2, imm } => {
-                if self.mmu.write_32(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2) as u32).is_err() {
+                if self.bus.write_32(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2) as u32).is_err() {
                     Err("Write error!".to_string())
                 } else {
                     Ok(())
                 }
             }
             Instructions::Sd { rs1, rs2, imm } => {
-                if self.mmu.write_64(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2)).is_err() {
+                if self.bus.write_64(self.read_reg(rs1).wrapping_add(imm as u64) as usize, self.read_reg(rs2)).is_err() {
                     Err("Write error!".to_string())
                 } else {
                     Ok(())
@@ -272,7 +274,9 @@ impl CPU {
         // Fetch, decode, execute:
         let raw_u32 = self.fetch();
         if raw_u32.is_err() {
-            self.running = false; return;
+            self.running = false;
+            println!("\nError fetching instruction at 0x{:X}, exiting.\n", self.pc);
+            return;
         }
         let inst = decode::Instructions::from(raw_u32.unwrap());
         println!("\n{:02X} inst: {:?}", self.pc, inst);

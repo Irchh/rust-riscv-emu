@@ -3,26 +3,26 @@
 pub const DRAM_BASE: usize = 0x8000_0000;
 
 #[derive(Debug)]
-pub struct MMU {
-    ram: Vec<u8>, // Box<[u8]> doesn't wanna work
+pub struct BUS {
+    dram: Vec<u8>, // Box<[u8]> doesn't wanna work
 }
 
-impl MMU {
-    pub fn new(mem_size: usize, buffer: Vec<u8>) -> MMU {
+impl BUS {
+    pub fn new(mem_size: usize, buffer: Vec<u8>) -> BUS {
         let mut memory = vec![0; mem_size];
         memory.splice(..buffer.len(), buffer.iter().cloned());
-        MMU {
-            ram: memory,
+        BUS {
+            dram: memory,
         }
     }
 
     pub fn write_8(&mut self, addr: usize, val: u8) -> Result<(), ()> {
         // TODO: Paging
         println!("\tWriting \"{:02X}\" to addr 0x{:X}", val, addr);
-        if addr < DRAM_BASE || addr >= self.ram.len()+DRAM_BASE {
+        if addr < DRAM_BASE || addr >= self.dram.len()+DRAM_BASE {
             Err(())
         } else {
-            self.ram[addr-DRAM_BASE] = val;
+            self.dram[addr-DRAM_BASE] = val;
             Ok(())
         }
     }
@@ -56,11 +56,11 @@ impl MMU {
 
     pub fn read_8(&self, addr: usize) -> Result<u8, ()> {
         // TODO: Paging
-        if addr < DRAM_BASE || addr >= self.ram.len()+DRAM_BASE {
+        if addr < DRAM_BASE || addr >= self.dram.len()+DRAM_BASE {
             Err(())
         } else {
             //println!("\tReading \"{:02X}\" from addr 0x{:X}", self.ram[addr-DRAM_BASE], addr);
-            Ok(self.ram[addr-DRAM_BASE])
+            Ok(self.dram[addr-DRAM_BASE])
         }
     }
 

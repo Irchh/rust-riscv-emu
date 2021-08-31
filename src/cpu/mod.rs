@@ -26,7 +26,7 @@ impl Display for CPU {
         f.write_str(format!("\tregs: {:?},\n", self.regs).as_str());
         f.write_str(format!("\tpc: {:?},\n", self.pc).as_str());
         f.write_str(format!("\trunning: {:?},\n", self.running).as_str());
-        f.write_str(format!("\tmmu: MMU {{ ... }},\n").as_str());
+        f.write_str(format!("\tbus: BUS {{ ... }},\n").as_str());
         f.write_str("}\n");
         Ok(())
     }

@@ -5,6 +5,7 @@ use crate::Cmd::*;
 use crate::Flags::{File, Interactive};
 
 mod cpu;
+mod dram;
 mod bus;
 
 #[derive(Debug)]

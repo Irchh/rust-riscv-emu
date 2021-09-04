@@ -32,7 +32,7 @@ impl BUS {
         if addr < DRAM_BASE {
             Err(())
         } else {
-            self.dram.read(addr-DRAM_BASE, size,)
+            self.dram.read(addr-DRAM_BASE, size)
         }
     }
 }

@@ -1,6 +1,9 @@
 use crate::cpu::decode::Instructions::*;
 use std::fmt::{Debug, Formatter};
 use crate::cpu::REG_NAMES;
+use std::convert::TryFrom;
+use strum::IntoEnumIterator; // 0.17.1
+use strum_macros::EnumIter;
 
 pub enum Instructions {
     Add{rd: usize, rs1: usize, rs2: usize},
@@ -16,12 +19,14 @@ pub enum Instructions {
     Blt{rs1: usize, rs2: usize, imm: i64},
     Bltu{rs1: usize, rs2: usize, imm: i64},
     Bne{rs1: usize, rs2: usize, imm: i64},
-    Csrrc,
-    Csrrci,
-    Csrrs,
-    Csrrsi,
-    Csrrw,
-    Csrrwi,
+
+    Csrrc{rd: usize, rs1: usize, csr: i64},
+    Csrrci{rd: usize, rs1: usize, csr: i64},
+    Csrrs{rd: usize, rs1: usize, csr: i64},
+    Csrrsi{rd: usize, rs1: usize, csr: i64},
+    Csrrw{rd: usize, rs1: usize, csr: i64},
+    Csrrwi{rd: usize, rs1: usize, csr: i64},
+
     Ebreak,
     Ecall,
     Fence{rd: usize, rs1: usize, succ: i64, pred: i64, fm: i64},
@@ -80,6 +85,32 @@ pub enum Instructions {
     Unknown,
 }
 
+#[allow(non_camel_case_types)]
+#[derive(Debug, EnumIter, Clone)]
+pub enum CsrNames {
+    sstatus = 0x100,
+    sedeleg,
+
+    mstatus = 0x300,
+    misa,
+    medeleg,
+
+    mhartid = 0xf14,
+}
+
+impl TryFrom<i64> for CsrNames {
+    type Error = i64;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        for t in CsrNames::iter() {
+            if value == t.clone() as i64 {
+                return Ok(t.clone());
+            }
+        }
+        return Err(value);
+    }
+}
+
 impl Debug for Instructions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let _ = match *self {
@@ -122,12 +153,24 @@ impl Debug for Instructions {
             Instructions::Bne { rs1, rs2, imm } => {
                 f.write_str(format!("Bne {}, {}, {}", REG_NAMES[rs1], REG_NAMES[rs2], imm).as_str())
             }
-            Csrrc => { f.write_str(format!("Csrrc").as_str()) }
-            Csrrci => { f.write_str(format!("Csrrci").as_str()) }
-            Csrrs => { f.write_str(format!("Csrrs").as_str()) }
-            Csrrsi => { f.write_str(format!("Csrrsi").as_str()) }
-            Csrrw => { f.write_str(format!("Csrrw").as_str()) }
-            Csrrwi => { f.write_str(format!("Csrrwi").as_str()) }
+            Csrrc{rd, rs1, csr: imm } => {
+                f.write_str(format!("Csrrc {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
+            Csrrci{rd, rs1, csr: imm } => {
+                f.write_str(format!("Csrrci {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
+            Csrrs{rd, rs1, csr: imm } => {
+                f.write_str(format!("Csrrs {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
+            Csrrsi{rd, rs1, csr: imm } => {
+                f.write_str(format!("Csrrsi {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
+            Csrrw{rd, rs1, csr: imm } => {
+                f.write_str(format!("Csrrw {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
+            Csrrwi{rd, rs1, csr: imm } => {
+                f.write_str(format!("Csrrwi {}, {}, {}", REG_NAMES[rd], REG_NAMES[rs1], imm).as_str())
+            }
             Ebreak => { f.write_str(format!("Ebreak").as_str()) }
             Ecall => { f.write_str(format!("Ecall").as_str()) }
             Instructions::Fence { rd, rs1, succ, pred, fm } => {
@@ -228,6 +271,7 @@ impl Instructions {
         let rs1 = ((inst>>15)&0x1F) as usize;
         let rs2 = ((inst>>20)&0x1F) as usize;
         let funct3 = ((inst>>12)&0x7) as usize;
+        #[allow(unused_variables)]
         let funct7 = ((inst>>25)&0x7F) as usize;
         let itype_imm =  (((inst&0xFFF00000) as i32)>>20) as i32 as i64; // Sign extension logic (??)
         let stype_imm = (((((inst&0xFE000000) as i32)>>20) as u32) | rd as u32) as i32 as i64;
@@ -235,7 +279,7 @@ impl Instructions {
 
         let __btype_imm = stype_imm & !1;
         let _btype_imm = __btype_imm & !(1<<11);
-        let btype_imm = (_btype_imm | (stype_imm & 1)<<11); // TODO: Check for accuracy
+        let btype_imm = _btype_imm | (stype_imm & 1)<<11; // TODO: Check for accuracy
 
         let _jtype_imm_1_10 = (((inst >> 21) & 0x3FF) << 1) as i64;
         let _jtype_imm_11 = (((inst >> 20) & 0x1) << 11) as i64;
@@ -331,6 +375,33 @@ impl Instructions {
             0x67 => { Jalr { rd, rs1, imm: itype_imm } }
 
             0x6F => { Jal { rd, imm: jtype_imm } }
+
+            0x73 => /* SYSTEM */ {
+                match funct3 {
+                    0x1 => /* CSRRW */ {
+                        Csrrw { rd, rs1, csr: itype_imm }
+                    }
+                    0x2 => /* CSRRS */ {
+                        Csrrs { rd, rs1, csr: itype_imm }
+                    }
+                    0x3 => /* CSRRC */ {
+                        Csrrc { rd, rs1, csr: itype_imm }
+                    }
+                    0x5 => /* CSRRWI */ {
+                        Csrrwi { rd, rs1, csr: itype_imm }
+                    }
+                    0x6 => /* CSRRSI */ {
+                        Csrrsi { rd, rs1, csr: itype_imm }
+                    }
+                    0x7 => /* CSRRCI */ {
+                        Csrrci { rd, rs1, csr: itype_imm }
+                    }
+                    _ => {
+                        println!("Unknown funct3 system: 0x{:X}", funct3);
+                        Unknown
+                    }
+                }
+            }
 
             _ => {
                 println!("Unknown instruction: 0x{:02X}", opcode);

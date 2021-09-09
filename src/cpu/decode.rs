@@ -2,7 +2,7 @@ use crate::cpu::decode::Instructions::*;
 use std::fmt::{Debug, Formatter};
 use crate::cpu::REG_NAMES;
 use std::convert::TryFrom;
-use strum::IntoEnumIterator; // 0.17.1
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub enum Instructions {

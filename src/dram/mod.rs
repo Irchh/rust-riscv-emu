@@ -45,7 +45,7 @@ impl DRAM {
     pub fn write_8(&mut self, addr: usize, val: u8) -> Result<(), ()> {
         // TODO: Paging
         println!("\tWriting \"{:02X}\" to addr 0x{:X}", val, addr);
-        if addr < 0 || addr >= self.dram.len() {
+        if addr >= self.dram.len() {
             Err(())
         } else {
             self.dram[addr] = val;
@@ -82,7 +82,7 @@ impl DRAM {
 
     pub fn read_8(&self, addr: usize) -> Result<u64, ()> {
         // TODO: Paging
-        if addr < 0 || addr >= self.dram.len() {
+        if addr >= self.dram.len() {
             Err(())
         } else {
             //println!("\tReading \"{:02X}\" from addr 0x{:X}", self.ram[addr-DRAM_BASE], addr);

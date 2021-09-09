@@ -1,5 +1,4 @@
 use std::{env, fs};
-use std::io::{Read, Write};
 
 use crate::Cmd::*;
 use crate::Flags::{File, Interactive};
@@ -45,8 +44,8 @@ fn get_input() -> String {
     let mut s = String::new();
 
     print!("> ");
-    stdout().flush();
-    stdin().read_line(&mut s);
+    let _ = stdout().flush();
+    let _ = stdin().read_line(&mut s);
     if let Some('\n')=s.chars().next_back() {
         s.pop();
     }
